@@ -1,0 +1,86 @@
+import PySimpleGUI as sg
+import pandas as pd
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+import datetime  # Import datetime to handle date and time functionality
+
+# Ensure NLTK resources are available
+nltk.download('punkt')
+nltk.download('stopwords')
+
+# Load sentiment analysis model
+def load_sentiment_model():
+    data = pd.read_csv("emotion_sentimen_dataset.csv")
+    vectorizer = TfidfVectorizer(max_features=1000)
+    X = vectorizer.fit_transform(data['text'])
+    y = data['Emotion']
+    model = LogisticRegression()
+    model.fit(X, y)
+    return model, vectorizer
+
+# Preprocess text for sentiment analysis
+def preprocess_text_for_sentiment(text):
+    stop_words = set(stopwords.words('english'))
+    tokens = word_tokenize(text)
+    return ' '.join([word.lower() for word in tokens if word.isalnum() and word.lower() not in stop_words])
+
+# Predict emotion using sentiment analysis model
+def predict_emotion(text, model, vectorizer):
+    clean_text = preprocess_text_for_sentiment(text)
+    X = vectorizer.transform([clean_text])
+    emotion = model.predict(X)[0]
+    return emotion
+
+# Function to count words
+def count_words(text):
+    tokens = word_tokenize(text)
+    return len([word for word in tokens if word.isalnum()])
+
+# Define the theme for the GUI
+sg.theme('Default1')
+sg.set_options(background_color='#fcd5ce', text_element_background_color='#fcd5ce',
+               element_background_color='#fcd5ce', scrollbar_color=None)
+
+# All the stuff inside your window.
+layout = [
+    [sg.Text('Welcome to Diary Site', font=('Any', 20), text_color='black')],
+    [sg.Text('Write your diary here:', text_color='black')],
+    [sg.InputText(size=(50, 1), key='-DIARY_ENTRY-')],
+    [sg.Button('Submit', button_color=('black', '#EFB0A1'), border_width=1), sg.Button('Clear'), sg.Button('Copy')],
+    [sg.Text(size=(50, 1), key='-OUTPUT-', text_color='black', justification='center')],  # This will show the predicted emotion
+    [sg.Text('Word Count: 0', key='-WORD_COUNT-', text_color='black')],  # This will show the word count
+    [sg.Text('', size=(20, 1), key='-DATE_TIME-', justification='center', text_color='black')]  # This will show the date
+]
+
+# Create the Window
+window = sg.Window('Diary Site', layout, element_justification='c', resizable=True)
+
+# Load sentiment analysis model
+sentiment_model, vectorizer = load_sentiment_model()
+
+# Event Loop to process "events" and get the "values" of the inputs
+while True:
+    event, values = window.read(timeout=1000)  # Timeout set to update the date every second
+    if event == sg.WIN_CLOSED:  # if user closes window
+        break
+    if event == 'Submit':
+        diary_entry = values['-DIARY_ENTRY-']
+        word_count = count_words(diary_entry)
+        predicted_emotion = predict_emotion(diary_entry, sentiment_model, vectorizer)
+        window['-OUTPUT-'].update(f'Predicted Emotion: {predicted_emotion}')
+        window['-WORD_COUNT-'].update(f'Word Count: {word_count}')
+    elif event == 'Clear':
+        window['-DIARY_ENTRY-'].update('')
+        window['-OUTPUT-'].update('')
+        window['-WORD_COUNT-'].update('Word Count: 0')
+    elif event == 'Copy':
+        sg.clipboard_set(values['-DIARY_ENTRY-'])
+    
+    # Update date continuously
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    window['-DATE_TIME-'].update(current_date)
+
+window.close()
